@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Chat Moderator",
+  "description": "Умный робот-модератор для чатов Telegram с фильтрацией ненормативной лексики, определением тональности, оценкой сообщений от -5 до +5, кармой и временной блокировкой.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
