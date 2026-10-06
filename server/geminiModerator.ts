@@ -1,4 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { appendFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { ModerationResult } from "../src/types";
 
 // Common Russian profanity roots and patterns for ultra-fast local checking and fallback
@@ -112,6 +114,22 @@ function fallbackRuleAnalysis(text: string): ModerationResult {
 
 let geminiClient: GoogleGenAI | null = null;
 
+async function writeGeminiLog(entry: Record<string, unknown>): Promise<void> {
+  if (process.env.GEMINI_API_LOGGING !== "true") return;
+
+  const logPath = process.env.GEMINI_API_LOG_FILE || path.join(process.cwd(), "logs", "gemini-api.log");
+  try {
+    await mkdir(path.dirname(logPath), { recursive: true });
+    await appendFile(
+      logPath,
+      `${JSON.stringify({ timestamp: new Date().toISOString(), ...entry })}\n`,
+      "utf8"
+    );
+  } catch (error) {
+    console.error("Failed to write Gemini API log:", error);
+  }
+}
+
 function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
@@ -136,6 +154,7 @@ export async function analyzeMessageWithGemini(
   const client = getGeminiClient();
 
   if (!client) {
+    await writeGeminiLog({ event: "skipped", input: text, error: "GEMINI_API_KEY is not configured" });
     return fallback;
   }
 
@@ -164,6 +183,8 @@ ${userHistorySummary ? `Контекст пользователя: ${userHistory
 - categories: массив тегов на русском (например: 'Ненормативная лексика', 'Оскорбление', 'Конструктив', 'Спам', 'Позитив')
 - explanation: краткое емкое объяснение на русском языке (до 15 слов) почему выставлена такая оценка
 - action: 'allow' | 'warn' | 'delete' | 'mute_temp' | 'ban'`;
+
+    await writeGeminiLog({ event: "request", model: "gemini-3.8-flash", prompt });
 
     // Call Gemini with a 3.5-second timeout to prevent UI hang
     const timeoutPromise = new Promise<null>((resolve) =>
@@ -212,12 +233,32 @@ ${userHistorySummary ? `Контекст пользователя: ${userHistory
           },
         },
       })
-      .catch((err) => {
+      .then(async (response) => {
+        await writeGeminiLog({
+          event: "response",
+          model: "gemini-3.8-flash",
+          responseText: response.text,
+          candidates: response.candidates,
+          usageMetadata: response.usageMetadata,
+          modelVersion: response.modelVersion,
+        });
+        return response;
+      })
+      .catch(async (err) => {
         console.warn('Gemini API call failed, using rule-based fallback:', err?.message || err);
+        await writeGeminiLog({ event: "error", model: "gemini-3.8-flash", error: err?.message || String(err) });
         return null;
       });
 
-    const response = (await Promise.race([apiCallPromise, timeoutPromise])) as any;
+    const timeoutMarker = Symbol("gemini-timeout");
+    const response = (await Promise.race([
+      apiCallPromise,
+      timeoutPromise.then(() => timeoutMarker),
+    ])) as any;
+    if (response === timeoutMarker) {
+      await writeGeminiLog({ event: "timeout", model: "gemini-3.8-flash", timeoutMs: 3500 });
+      return fallback;
+    }
     if (!response || !response.text) {
       return fallback;
     }
@@ -274,6 +315,7 @@ ${userHistorySummary ? `Контекст пользователя: ${userHistory
     };
   } catch (err) {
     console.error('Error calling Gemini moderation API, using fallback rules:', err);
+    await writeGeminiLog({ event: "processing_error", input: text, error: err instanceof Error ? err.message : String(err) });
     return fallback;
   }
 }
