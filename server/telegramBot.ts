@@ -363,7 +363,10 @@ export class TelegramService {
     } else if (result.message.botReply) {
       // Send bot moderation reply
       await this.sendMessage(chatId, result.message.botReply, messageId);
-    } else if (store.getSettings().showRatingBadgeUnderAll || modResult.score <= -1 || modResult.score >= 4) {
+    } else if (
+      modResult.sentiment !== 'neutral' &&
+      (store.getSettings().showRatingBadgeUnderAll || modResult.score <= -1 || modResult.score >= 4)
+    ) {
       // Send reaction/score badge under message
       await this.sendMessage(chatId, scoreBadge, messageId);
     }
