@@ -11,6 +11,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'users' | 'analytics' | 'settings'>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [demoDataEnabled, setDemoDataEnabled] = useState(false);
   const [stats, setStats] = useState<ModerationStats | null>(null);
   const [settings, setSettings] = useState<BotSettings>({
     muteThreshold: -10,
@@ -27,17 +28,21 @@ export default function App() {
 
   const loadData = useCallback(async () => {
     try {
-      const [msgRes, usersRes, statsRes, settingsRes] = await Promise.all([
+      const [msgRes, usersRes, statsRes, settingsRes, configRes] = await Promise.all([
         fetch('/api/chat/messages').then((r) => r.json()),
         fetch('/api/users').then((r) => r.json()),
         fetch('/api/stats').then((r) => r.json()),
         fetch('/api/settings').then((r) => r.json()),
+        fetch('/api/config').then((r) => r.json()),
       ]);
 
       if (msgRes.messages) setMessages(msgRes.messages);
       if (usersRes.users) setUsers(usersRes.users);
       if (statsRes.stats) setStats(statsRes.stats);
       if (settingsRes.settings) setSettings(settingsRes.settings);
+      if (typeof configRes.demoDataEnabled === 'boolean') {
+        setDemoDataEnabled(configRes.demoDataEnabled);
+      }
     } catch (err) {
       console.error('Failed to load initial data:', err);
     }
@@ -299,6 +304,7 @@ export default function App() {
             isLoading={isLoading}
             onRefresh={loadData}
             telegramBotName={settings?.telegramBotUsername}
+            showDemoControls={demoDataEnabled}
           />
         )}
 

@@ -18,6 +18,7 @@ interface TelegramChatSimulatorProps {
   isLoading: boolean;
   onRefresh?: () => void;
   telegramBotName?: string;
+  showDemoControls: boolean;
 }
 
 const PRESET_PERSONAS = [
@@ -99,6 +100,7 @@ export function TelegramChatSimulator({
   isLoading,
   onRefresh,
   telegramBotName,
+  showDemoControls,
 }: TelegramChatSimulatorProps) {
   const [inputText, setInputText] = useState('');
   const [selectedPersonaId, setSelectedPersonaId] = useState('user_me');
@@ -189,6 +191,7 @@ export function TelegramChatSimulator({
       </div>
 
       {/* Quick Test Scenarios Bar */}
+      {showDemoControls && (
       <div className="px-4 py-2 bg-slate-100/90 border-b border-slate-200 flex items-center gap-2 overflow-x-auto text-xs">
         <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
           Быстрый тест:
@@ -207,6 +210,7 @@ export function TelegramChatSimulator({
           ))}
         </div>
       </div>
+      )}
 
       {/* Messages Stream Container (Telegram Wallpaper Style) */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/70">
@@ -336,7 +340,7 @@ export function TelegramChatSimulator({
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <span className="font-semibold text-slate-500">Писать от лица:</span>
             <div className="flex items-center gap-1">
-              {PRESET_PERSONAS.map((persona) => {
+              {(showDemoControls ? PRESET_PERSONAS : PRESET_PERSONAS.slice(0, 1)).map((persona) => {
                 const isSelected = persona.id === selectedPersonaId;
                 const userRec = users.find((u) => u.id === persona.id);
                 const karma = userRec ? userRec.rating : 0;

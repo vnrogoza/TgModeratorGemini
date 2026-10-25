@@ -14,7 +14,9 @@ class ChatModerationStore {
   };
 
   constructor() {
-    this.seedInitialData();
+    if (process.env.DEMO_DATA_ENABLED === "true") {
+      this.seedInitialData();
+    }
   }
 
   private seedInitialData() {

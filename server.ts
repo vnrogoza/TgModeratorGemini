@@ -1,12 +1,10 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
-import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { store } from "./server/store";
 import { analyzeMessageWithGemini } from "./server/geminiModerator";
 import { telegramService } from "./server/telegramBot";
-
-dotenv.config();
 
 async function startServer() {
   const app = express();
@@ -17,6 +15,10 @@ async function startServer() {
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: Date.now() });
+  });
+
+  app.get("/api/config", (_req, res) => {
+    res.json({ demoDataEnabled: process.env.DEMO_DATA_ENABLED === "true" });
   });
 
   // Moderation text analyzer (for direct playground or manual test)
