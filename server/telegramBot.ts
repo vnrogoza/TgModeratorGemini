@@ -174,23 +174,36 @@ export class TelegramService {
     }
   }
 
-  public async deleteMessage(chatId: number | string, messageId: number) {
-    if (!this.token) return;
+  public async deleteMessage(
+    chatId: number | string,
+    messageId: number
+  ): Promise<{ success: boolean; description?: string }> {
+    if (!this.token) return { success: false, description: 'Telegram bot token is not configured' };
     try {
-      await fetch(`https://api.telegram.org/bot${this.token}/deleteMessage`, {
+      const response = await fetch(`https://api.telegram.org/bot${this.token}/deleteMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
       });
+      const data = await response.json();
+      if (!data.ok) {
+        console.error('Telegram failed to delete message:', data.description);
+      }
+      return { success: Boolean(data.ok), description: data.description };
     } catch (err) {
       console.error('Failed to delete Telegram message:', err);
+      return { success: false, description: err instanceof Error ? err.message : String(err) };
     }
   }
 
-  public async restrictMember(chatId: number | string, userId: number | string, untilDateUnix: number) {
-    if (!this.token) return;
+  public async restrictMember(
+    chatId: number | string,
+    userId: number | string,
+    untilDateUnix: number
+  ): Promise<{ success: boolean; description?: string }> {
+    if (!this.token) return { success: false, description: 'Telegram bot token is not configured' };
     try {
-      await fetch(`https://api.telegram.org/bot${this.token}/restrictChatMember`, {
+      const response = await fetch(`https://api.telegram.org/bot${this.token}/restrictChatMember`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -214,8 +227,14 @@ export class TelegramService {
           },
         }),
       });
+      const data = await response.json();
+      if (!data.ok) {
+        console.error('Telegram failed to restrict chat member:', data.description);
+      }
+      return { success: Boolean(data.ok), description: data.description };
     } catch (err) {
       console.error('Failed to restrict Telegram chat member:', err);
+      return { success: false, description: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -317,19 +336,30 @@ export class TelegramService {
     // Form score notification badge under message
     const scoreBadge = `${scoreEmoji} <b>[${scoreSign}${modResult.score}/5]</b> ${modResult.explanation} | Карма: ${result.user.rating}`;
 
-    // If auto-delete profanity
-    if (store.getSettings().autoDeleteProfanity && modResult.profanityDetected) {
-      await this.deleteMessage(chatId, messageId);
+    // Remove messages the store rejected, including messages sent while muted.
+    if (result.message.isDeleted) {
+      const deletion = await this.deleteMessage(chatId, messageId);
+      if (!deletion.success) {
+        console.error('Rejected Telegram message could not be deleted:', deletion.description);
+      }
     }
 
     // If auto-muted
     if (result.autoAction === 'muted') {
       const untilUnix = Math.floor(Date.now() / 1000) + store.getSettings().muteDurationMinutes * 60;
-      await this.restrictMember(chatId, from.id, untilUnix);
-      await this.sendMessage(
-        chatId,
-        `🔇 <b>Пользователь @${username} временно заблокирован на ${store.getSettings().muteDurationMinutes} мин!</b>\nПричина: Высокий отрицательный рейтинг (${result.user.rating}).\nОценка: [${scoreSign}${modResult.score}/5] ${modResult.explanation}`
-      );
+      const restriction = await this.restrictMember(chatId, from.id, untilUnix);
+      if (restriction.success) {
+        await this.sendMessage(
+          chatId,
+          `🔇 <b>Пользователь @${username} временно заблокирован на ${store.getSettings().muteDurationMinutes} мин!</b>\nПричина: Высокий отрицательный рейтинг (${result.user.rating}).\nОценка: [${scoreSign}${modResult.score}/5] ${modResult.explanation}`
+        );
+      } else {
+        console.error('Automatic mute was not applied in Telegram:', restriction.description);
+        await this.sendMessage(
+          chatId,
+          `⚠️ Не удалось применить мут к @${username}. Проверьте, что бот является администратором и имеет право блокировать участников.`
+        );
+      }
     } else if (result.message.botReply) {
       // Send bot moderation reply
       await this.sendMessage(chatId, result.message.botReply, messageId);
